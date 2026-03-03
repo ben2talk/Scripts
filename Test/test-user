@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) [2026] [Ben Guy-Williams]
+
+#!/bin/bash
+
+# This script will make it trivial for someone to create a fresh Test user for verification purposes when troubleshooting.
+## If no Test exists, offer to create one.
+## If Test exists, offer to refresh, or remove it.
+# If not run as root, attempts to re‑run via 'su' (asks for root password)
+# After running the script, logging in to the new account should provide a fresh environment in which users can verify whether they have a faulty system, or whether it's a USER related issue.
+
+USERNAME="Test"
+PASSWORD="test"
+
+# Check if running as root – if not, get authorised:
+if [ "$EUID" -ne 0 ]; then
+    echo "Not running as root. Attempting to re‑run with 'su' (requires root password)..."
+    # Use exec to replace the current shell; "$0" is the script itself,
+    exec su -c "$0 $*" root
+fi
+
+create_user() {
+    echo "Creating user '$USERNAME' with home directory..."
+    useradd -m "$USERNAME"
+    if [ $? -ne 0 ]; then
+        echo "Failed to create user '$USERNAME'."
+        exit 1
+    fi
+    echo "User '$USERNAME' created."
+
+    echo "Setting password to '$PASSWORD'..."
+    echo "$USERNAME:$PASSWORD" | chpasswd
+    if [ $? -eq 0 ]; then
+        echo "Password set successfully."
+    else
+        echo "Failed to set password."
+        exit 1
+    fi
+}
+
+remove_user() {
+    echo "Removing user '$USERNAME' and their home directory/mail spool..."
+    userdel -r "$USERNAME"
+    if [ $? -eq 0 ]; then
+        echo "User '$USERNAME' removed."
+    else
+        echo "Failed to remove user '$USERNAME'."
+        exit 1
+    fi
+}
+
+# Logic
+if id "$USERNAME" &>/dev/null; then
+    echo "User '$USERNAME' already exists."
+    while true; do
+        echo "What are we doing?"
+        echo "1) Recreate (remove and create anew)"
+        echo "2) Remove only"
+        echo "Press any other key to exit."
+        read -p "Enter choice [1/2 or any other key]: " choice
+
+        case $choice in
+        1)
+            remove_user
+            create_user
+            break
+            ;;
+        2)
+            remove_user
+            break
+            ;;
+        *)
+            echo "No changes made."
+            exit 0
+            ;;
+        esac
+    done
+else
+    echo "User '$USERNAME' does not exist. Creating..."
+    create_user
+fi
+
+echo "Ok, good luck ;)"
